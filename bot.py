@@ -79,28 +79,37 @@ def school_prefixes(guild: discord.Guild) -> list[str]:
     return sorted(prefixes, key=len, reverse=True)
 
 
+# 高校名プレフィックスの直後に付きがちな区切り・記号（先頭から除去する）
+LEADING_STRIP = " 　、，・･_-‐―ー|｜/／:：．.＃#"
+
+
 def compute_base(member: discord.Member) -> str:
-    """ニックネームから先頭の高校プレフィックスを（重複していても全部）取り除いた素の名前を返す。"""
+    """ニックネームから先頭の高校プレフィックスを（重複していても全部）取り除いた素の名前を返す。
+    幹の直後が区切り文字でなくても剥がす（例: 『湘南学院、Tuwacha』『津久井浜ゆうご』にも対応）。
+    """
     base = member.nick or member.name
     prefixes = school_prefixes(member.guild)
     changed = True
     while changed:
         changed = False
+        # まず先頭の余分な区切り・記号を除去
+        new = base.lstrip(LEADING_STRIP)
+        if new != base:
+            base = new
+            changed = True
+        # 先頭一致する高校プレフィックス（長い順）を剥がす
         for p in prefixes:
-            # "湘南学院高校 " や "湘南学院 " のように先頭一致するものを剥がす
-            if base.startswith(p):
-                rest = base[len(p):]
-                if rest == "" or rest[0] in (SEPARATOR, " ", "　"):
-                    base = rest.lstrip(SEPARATOR + " 　")
-                    changed = True
-                    break
+            if p and base.startswith(p):
+                base = base[len(p):]
+                changed = True
+                break
     return base
 
 
 def build_nickname(member: discord.Member, school_name: str) -> str | None:
     """高校名を頭に付けたニックネームを生成。既に付いていれば None。"""
     base = compute_base(member)
-    new_nick = f"{school_name}{SEPARATOR}{base}"
+    new_nick = f"{school_name}{SEPARATOR}{base}" if base else school_name
 
     # Discordのニックネーム上限は32文字
     if len(new_nick) > 32:
