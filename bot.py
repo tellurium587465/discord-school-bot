@@ -61,17 +61,45 @@ def get_school_role(member: discord.Member) -> discord.Role | None:
     return max(school_roles, key=lambda r: r.position)
 
 
+def school_prefixes(guild: discord.Guild) -> list[str]:
+    """剥がす対象の高校プレフィックス一覧を返す。
+    各高校ロールについて「高校名そのもの」と「高校を除いた幹」の両方を対象にする。
+    例: ロール『湘南学院高校』→ ['湘南学院高校', '湘南学院'] を剥がせるようにする。
+    長いものから順に並べ、誤って短い方を先に剥がさないようにする。
+    """
+    prefixes: set[str] = set()
+    for r in guild.roles:
+        if r.name.endswith(SCHOOL_SUFFIXES):
+            prefixes.add(r.name)
+            for suffix in SCHOOL_SUFFIXES:
+                if r.name.endswith(suffix):
+                    stem = r.name[: -len(suffix)]
+                    if stem:
+                        prefixes.add(stem)
+    return sorted(prefixes, key=len, reverse=True)
+
+
+def compute_base(member: discord.Member) -> str:
+    """ニックネームから先頭の高校プレフィックスを（重複していても全部）取り除いた素の名前を返す。"""
+    base = member.nick or member.name
+    prefixes = school_prefixes(member.guild)
+    changed = True
+    while changed:
+        changed = False
+        for p in prefixes:
+            # "湘南学院高校 " や "湘南学院 " のように先頭一致するものを剥がす
+            if base.startswith(p):
+                rest = base[len(p):]
+                if rest == "" or rest[0] in (SEPARATOR, " ", "　"):
+                    base = rest.lstrip(SEPARATOR + " 　")
+                    changed = True
+                    break
+    return base
+
+
 def build_nickname(member: discord.Member, school_name: str) -> str | None:
     """高校名を頭に付けたニックネームを生成。既に付いていれば None。"""
-    # 表示名から既存の高校プレフィックスを除去
-    base = member.nick or member.name
-    for suffix in SCHOOL_SUFFIXES:
-        # "〇〇高校 " のような既存プレフィックスを剥がす
-        idx = base.find(suffix)
-        if idx != -1 and base.startswith(base[:idx] + suffix):
-            base = base[idx + len(suffix):].lstrip(SEPARATOR)
-            break
-
+    base = compute_base(member)
     new_nick = f"{school_name}{SEPARATOR}{base}"
 
     # Discordのニックネーム上限は32文字
@@ -85,13 +113,10 @@ def build_nickname(member: discord.Member, school_name: str) -> str | None:
 
 def strip_prefix(member: discord.Member) -> str | None:
     """高校名プレフィックスを除いた素のニックネームを返す。付いていなければ None。"""
-    base = member.nick or member.name
-    for suffix in SCHOOL_SUFFIXES:
-        idx = base.find(suffix)
-        if idx != -1 and base.startswith(base[:idx] + suffix):
-            stripped = base[idx + len(suffix):].lstrip(SEPARATOR)
-            if stripped and stripped != (member.nick or member.name):
-                return stripped
+    current = member.nick or member.name
+    base = compute_base(member)
+    if base and base != current:
+        return base
     return None
 
 
