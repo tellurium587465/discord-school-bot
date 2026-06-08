@@ -1,0 +1,14 @@
+# 秘密情報・個人情報は絶対にコミットしない
+.env
+*.env
+!.env.example
+
+# 更新ログ（メンバー名・サーバー情報を含むため除外）
+update.log
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
